@@ -2,125 +2,164 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.LineIterator;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.function.Function;
 
-public class ProcessCSV implements BaseProcessCSV {
+public class ProcessCSV {
 
-    LineIterator iterator;
-    FileOutputStream fileOutputStream;
-    File tempFile;
+    private LineIterator iterator;
+    private File tempFile;
+    private ArrayList funcList;
 
-    public ProcessCSV(File file) {
+    public  ProcessCSV(File file) {
         try {
             this.iterator = FileUtils.lineIterator(file, "UTF-8");
             this.tempFile = File.createTempFile("processCSV", ".csv");
+            this.funcList = new ArrayList();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    @Override
     public ProcessCSV sum() {
-        long colSum = 0;
-        while (iterator.hasNext()){
-            colSum += Long.valueOf(iterator.nextLine().split(",")[0]);
-        }
-        System.out.println("sum: " + colSum);
-        try {
-            FileUtils.writeStringToFile(this.tempFile, String.valueOf(colSum), "UTF-8");
-        } catch (IOException e) {
-            return null;
-        }
-        return new ProcessCSV(this.tempFile);
-    }
+        AggregatedTransformer transformer = new AggregatedTransformer() {
+            long sum;
 
-    @Override
-    public ProcessCSV avg() {
-        long colSum = 0;
-        long rowCounter = 0;
-        while (iterator.hasNext()){
-            colSum += Long.valueOf(iterator.nextLine().split(",")[0]);
-            rowCounter++;
-        }
-        System.out.println("avg: " + colSum/rowCounter);
-        try {
-            FileUtils.writeStringToFile(this.tempFile, String.valueOf(colSum/rowCounter), "UTF-8");
-        } catch (IOException e) {
-            return null;
-        }
-        return new ProcessCSV(this.tempFile);
-    }
+            @Override
+            public String[] get() {
+                return new String[]{String.valueOf(sum)};
+            }
 
-    @Override
-    public ProcessCSV min() {
-        long min = Long.valueOf(iterator.nextLine().split(",")[0]);
-        while (iterator.hasNext()){
-            min = Math.min(min, Long.valueOf(iterator.nextLine().split(",")[0]));
-        }
-        try {
-            FileUtils.writeStringToFile(this.tempFile, String.valueOf(min), "UTF-8");
-        } catch (IOException e) {
-            return null;
-        }
-        return new ProcessCSV(this.tempFile);
-    }
-
-    @Override
-    public ProcessCSV max() {
-        long max = Long.valueOf(iterator.nextLine().split(",")[0]);
-        while (iterator.hasNext()){
-            max = Math.max(max, Long.valueOf(iterator.nextLine().split(",")[0]));
-        }
-        try {
-            FileUtils.writeStringToFile(this.tempFile, String.valueOf(max), "UTF-8");
-        } catch (IOException e) {
-            return null;
-        }
+            @Override
+            public void accept(String[] row) {
+                this.sum += Long.valueOf(row[0]);
+            }
+        };
+        this.funcList.add(transformer);
         return this;
     }
 
-    @Override
-    public ProcessCSV pluck(int fieldIndex) {
-        while (iterator.hasNext()){
-            System.out.println(iterator.nextLine().split(",")[fieldIndex]);
-            try {
-                FileUtils.writeStringToFile(this.tempFile, iterator.nextLine().split(",")[fieldIndex], "UTF-8");
-            } catch (IOException e) {
-                e.printStackTrace();
+    public ProcessCSV avg() {
+        AggregatedTransformer transformer = new AggregatedTransformer() {
+            long sum;
+            long counter;
+
+            @Override
+            public String[] get() {
+                return new String[]{String.valueOf(sum / counter)};
             }
-        }
-        return new ProcessCSV(this.tempFile);
+
+            @Override
+            public void accept(String[] row) {
+                this.sum = Long.parseLong(row[0]);
+            }
+        };
+        this.funcList.add(transformer);
+        return this;
     }
 
-    @Override
+    public ProcessCSV min() {
+        AggregatedTransformer transformer = new AggregatedTransformer() {
+            long min;
+
+            @Override
+            public String[] get() {
+                return new String[]{String.valueOf(min)};
+            }
+
+            @Override
+            public void accept(String[] row) {
+                if (Long.parseLong(row[0]) < min) {
+                    this.min = Long.parseLong(row[0]);
+                }
+            }
+        };
+        this.funcList.add(transformer);
+        return this;
+    }
+
+    public ProcessCSV max() {
+        AggregatedTransformer transformer = new AggregatedTransformer() {
+            long max;
+
+            @Override
+            public String[] get() {
+                return new String[]{String.valueOf(this.max)};
+            }
+
+            @Override
+            public void accept(String[] row) {
+                if (Long.valueOf(row[0]) > max) {
+                    this.max = Long.valueOf(row[0]);
+                }
+            }
+        };
+        this.funcList.add(transformer);
+        return this;
+    }
+
+    public ProcessCSV pluck(int fieldIndex) {
+        Transformer transformer = new Transformer() {
+            @Override
+            public String[] apply(String[] row) {
+                return new String[]{row[fieldIndex]};
+            }
+        };
+        this.funcList.add(transformer);
+        return this;
+    }
+
     public ProcessCSV filter(int fieldIndex, String value) {
-        File filteredFile = new File("");
-        while (iterator.hasNext()){
-            try {
-                String row[] = iterator.nextLine().split(",");
+        Transformer transformer = new Transformer() {
+            @Override
+            public String[] apply(String[] row) {
                 String currValue = row[fieldIndex];
                 if (currValue.equals(value)) {
-                    FileUtils.writeStringToFile(filteredFile, currValue, "UTF-8");
+                    return row;
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
+                return null;
             }
-        }
+        };
+        this.funcList.add(transformer);
         return this;
     }
 
-    @Override
     public ProcessCSV ceil() {
-        while (iterator.hasNext()){
+        Transformer transformer = new Transformer() {
+            @Override
+            public String[] apply(String[] row) {
+                String currValue = row[0];
+                return new String[]{String.valueOf(Math.ceil(Double.parseDouble(currValue)))};
+            }
+        };
+        this.funcList.add(transformer);
+        return this;
+    }
+
+    public void run() {
+        String sum = "";
+        while (iterator.hasNext()) {
+            String[] row = iterator.nextLine().split(",");
+            for (Object f : this.funcList) {
+                if (f instanceof AggregatedTransformer) {
+                    AggregatedTransformer func = ((AggregatedTransformer) f);
+                    func.accept(row);
+                    sum = func.get()[0];
+                } else if (f instanceof Transformer) {
+                    row = ((Transformer) f).apply(row);
+                }
+            }
             try {
-                FileUtils.writeStringToFile(this.tempFile, String.valueOf(Math.ceil(Double.valueOf(iterator.nextLine().split(",")[0]))),
-                                "UTF-8");
+                FileUtils.writeLines(this.tempFile, Arrays.asList(row));
+                System.out.println(row[0]);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-        return new ProcessCSV(this.tempFile);
+        System.out.println(sum);
     }
 }
