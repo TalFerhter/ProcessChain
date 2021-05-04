@@ -155,11 +155,9 @@ public class ProcessCSV {
             }
             try {
                 FileUtils.writeLines(this.tempFile, Arrays.asList(row));
-                System.out.println(row[0]);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-        System.out.println(sum);
     }
 }
